@@ -29,13 +29,19 @@ def handle_whatsapp_message(request):
         return Response({'status': 'success', 'message': 'Asking for last name'})
 
     if registration_stage == 'last_name':
-        request.session['phone_number'] = message_body
+        request.session['last_name'] = message_body
         request.session['registration_stage'] = 'phone_number'
         send_whatsapp_message(phone_number, "Please Enter your phone_number")
         return Response({'status': 'success', 'message': 'Asking for phone number'})
 
     if registration_stage == 'phone_number':
         # save the phone number complete the registration
+        if not  message_body.isdigit() or len(message_body) != 10:
+            send_whatsapp_message(
+                phone_number,
+                "invalid phone number, Please enter a valid phone number"
+            )
+            return Response({'status': 'error', 'message': 'invalid phone number'})
         request.session['phone_number'] = message_body
         request.session['registration_stage'] = None
         first_name = request.session.get('first_name')
