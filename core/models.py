@@ -27,7 +27,7 @@ class Client(models.Model):
     joined_date = models.DateField(auto_now_add=True)
 
     def __str__(self):
-        return self.user.username
+        return self.first_name
     
 
 class Subscription(models.Model):
@@ -37,7 +37,7 @@ class Subscription(models.Model):
     end_date = models.DateField()
 
     def __str__(self):
-        return f'{self.client.user.username} - {self.plan_name}'
+        return f'{self.client.username} - {self.plan_name}'
 
 
 class Attendance(models.Model):
@@ -45,4 +45,4 @@ class Attendance(models.Model):
     check_date = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f'{self.client.user.username} - {self.check_in_time}'
+        return f'{self.client.username} - {self.check_in_time}'
