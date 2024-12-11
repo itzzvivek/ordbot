@@ -1,9 +1,9 @@
-from webbrowser import register
-
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
+
 from .utils import send_whatsapp_message
+from .models import Client
 
 
 @csrf_exempt
@@ -46,6 +46,15 @@ def handle_whatsapp_message(request):
         request.session['registration_stage'] = None
         first_name = request.session.get('first_name')
         last_name = request.session.get('last_name')
+        Client.objects.create(
+            phone_number=message_body,
+            first_name=first_name,
+            last_name=last_name
+        )
+
+        #clear the session
+        request.session.flush()
+
         send_whatsapp_message(
             phone_number,
             f"Thank you {first_name} {last_name}! Your phone number {message_body} has been registered."

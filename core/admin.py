@@ -3,7 +3,7 @@ from .models import GymOwner, Client, Attendance, Subscription
 
 
 class ClientAdmin(admin.ModelAdmin):
-    list_display = ('first_name', 'last_name', 'membership_type')
+    list_display = ('first_name', 'last_name', 'membership_type', 'joined_date')
 
 
 admin.site.register(GymOwner)
