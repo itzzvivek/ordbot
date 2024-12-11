@@ -1,8 +1,10 @@
+from http.client import responses
+
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 
-from .utils import send_whatsapp_message
+from .utils import send_whatsapp_message, send_subscription_options
 from .models import Client
 
 
@@ -35,34 +37,56 @@ def handle_whatsapp_message(request):
         return Response({'status': 'success', 'message': 'Asking for phone number'})
 
     if registration_stage == 'phone_number':
-        # save the phone number complete the registration
-        if not  message_body.isdigit() or len(message_body) != 10:
+        # Validate the phone number format
+        if message_body.isdigit() and len(message_body) == 10:
+            # Save the phone number and proceed to subscription stage
+            request.session['phone_number'] = message_body
+            request.session['registration_stage'] = 'subscription'
+            send_subscription_options(phone_number)  # Function to send subscription options
+            return Response({'status': 'success', 'message': 'Subscription options sent'})
+        else:
+            # Handle invalid phone number
             send_whatsapp_message(
                 phone_number,
-                "invalid phone number, Please enter a valid phone number"
+                "Invalid phone number. Please enter a valid phone number."
             )
-            return Response({'status': 'error', 'message': 'invalid phone number'})
-        request.session['phone_number'] = message_body
-        request.session['registration_stage'] = None
-        first_name = request.session.get('first_name')
-        last_name = request.session.get('last_name')
-        Client.objects.create(
-            phone_number=message_body,
-            first_name=first_name,
-            last_name=last_name
-        )
+            return Response({'status': 'error', 'message': 'Invalid phone number'})
 
-        #clear the session
-        request.session.flush()
+    if registration_stage == 'subscription':
+        valid_choices = ['monthly_subscription', 'quarterly_subscription', 'yearly_subscription']
+        if message_body in valid_choices:
+            subscription_plan = message_body.replace('_', ' ').capitalize()
+            request.session['subscription_choice'] = subscription_plan
+            send_whatsapp_message(phone_number, f"Thank you for selecting the {subscription_plan} plan!")
 
-        send_whatsapp_message(
-            phone_number,
-            f"Thank you {first_name} {last_name}! Your phone number {message_body} has been registered."
-        )
-        return Response({'status': 'success', 'message': 'Registration complete'})
+            # Retrieve stored user details
+            first_name = request.session.get('first_name')
+            last_name = request.session.get('last_name')
+            phone = request.session.get('phone_number')
 
-    return Response({'status': 'error', 'message': 'Invalid command or stage.'})
+            # Save client data
+            Client.objects.create(
+                phone_number=phone,
+                first_name=first_name,
+                last_name=last_name,
+                subscription_plan=subscription_plan
+            )
 
+            # Clear session after registration
+            request.session.flush()
 
+            # Send confirmation message
+            send_whatsapp_message(
+                phone_number,
+                f"Thank you {first_name} {last_name}! Your phone number {phone} has been registered with the {subscription_plan} plan."
+            )
+            return Response({'status': 'success', 'message': 'Registration complete'})
+        else:
+            # Handle invalid subscription choice
+            send_whatsapp_message(phone_number, "Invalid choice. Please select a valid subscription option.")
+            return Response({'status': 'error', 'message': 'Invalid subscription choice'})
+
+    send_whatsapp_message(phone_number, "Invalid command or stage. Please type valid command")
+    return Response({'status': 'error', 'message': 'Invalid command or stage'})
 
 
