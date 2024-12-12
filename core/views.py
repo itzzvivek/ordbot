@@ -1,92 +1,103 @@
 from http.client import responses
+from multiprocessing.resource_tracker import register
 
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
+from datetime import datetime, timedelta
 
 from .utils import send_whatsapp_message, send_subscription_options
 from .models import Client
 
+SESSION_TIMEOUT_SECONDS = 60
 
 @csrf_exempt
 @api_view(['POST'])
 def handle_whatsapp_message(request):
-    print("Incoming request data:", request.data)
+    from datetime import datetime, timedelta
+
     phone_number = request.data.get('From', '').replace('whatsapp:', '')
     message_body = request.data.get('Body', '').strip().lower()
 
-    registration_stage = request.session.get('registration_stage')
-    print(f"register stage: {registration_stage}")
+    # Initialize session data
+    session_data = request.session.setdefault('registration_data', {})
+    registration_stage = session_data.get('stage')
+    stage_start_time = session_data.get('stage_start_time')  # Timestamp when stage started
 
-    if registration_stage is None and message_body == 'register-client':
-        # start registration process
-        request.session['registration_stage'] = 'first_name'
-        send_whatsapp_message(phone_number, "Please Enter your first name.")
-        return Response({'status': 'success', 'message': 'Asking for first name'})
+    # Check for session timeout
+    if stage_start_time:
+        stage_start_time = datetime.fromisoformat(stage_start_time)
+        if datetime.now() > stage_start_time + timedelta(seconds=SESSION_TIMEOUT_SECONDS):
+            # Session expired
+            request.session.flush()  # Clear session
+            send_whatsapp_message(phone_number, "Session expired. Please restart by typing 'register-client'.")
+            return Response({'status': 'error', 'message': 'Session expired.'})
+
+    # Registration process logic
+    if not registration_stage and message_body == 'register-client':
+        # Start registration
+        session_data['stage'] = 'first_name'
+        session_data['stage_start_time'] = datetime.now().isoformat()  # Save stage start time
+        request.session.modified = True
+        send_whatsapp_message(phone_number, "Please enter your first name.")
+        return Response({'status': 'success', 'message': 'First name requested.'})
 
     if registration_stage == 'first_name':
-        request.session['first_name'] = message_body
-        request.session['registration_stage'] = 'last_name'
-        send_whatsapp_message(phone_number, "Please Enter your last name.")
-        return Response({'status': 'success', 'message': 'Asking for last name'})
+        session_data['first_name'] = message_body
+        session_data['stage'] = 'last_name'
+        session_data['stage_start_time'] = datetime.now().isoformat()  # Update stage start time
+        request.session.modified = True
+        send_whatsapp_message(phone_number, "Please enter your last name.")
+        return Response({'status': 'success', 'message': 'Last name requested.'})
 
     if registration_stage == 'last_name':
-        request.session['last_name'] = message_body
-        request.session['registration_stage'] = 'phone_number'
-        send_whatsapp_message(phone_number, "Please Enter your phone_number")
-        return Response({'status': 'success', 'message': 'Asking for phone number'})
+        session_data['last_name'] = message_body
+        session_data['stage'] = 'phone_number'
+        session_data['stage_start_time'] = datetime.now().isoformat()  # Update stage start time
+        request.session.modified = True
+        send_whatsapp_message(phone_number, "Please enter your phone number.")
+        return Response({'status': 'success', 'message': 'Phone number requested.'})
 
     if registration_stage == 'phone_number':
-        # Validate the phone number format
         if message_body.isdigit() and len(message_body) == 10:
-            # Save the phone number and proceed to subscription stage
-            request.session['phone_number'] = message_body
-            request.session['registration_stage'] = 'subscription'
-            send_subscription_options(phone_number)  # Function to send subscription options
-            return Response({'status': 'success', 'message': 'Subscription options sent'})
+            session_data['phone_number'] = message_body
+            session_data['stage'] = 'subscription'
+            session_data['stage_start_time'] = datetime.now().isoformat()  # Update stage start time
+            request.session.modified = True
+            send_subscription_options(phone_number)  # Send subscription options
+            return Response({'status': 'success', 'message': 'Subscription options sent.'})
         else:
-            # Handle invalid phone number
-            send_whatsapp_message(
-                phone_number,
-                "Invalid phone number. Please enter a valid phone number."
-            )
-            return Response({'status': 'error', 'message': 'Invalid phone number'})
+            send_whatsapp_message(phone_number, "Invalid phone number. Please try again.")
+            return Response({'status': 'error', 'message': 'Invalid phone number.'})
 
     if registration_stage == 'subscription':
-        valid_choices = ['monthly_subscription', 'quarterly_subscription', 'yearly_subscription']
+        valid_choices = ['monthly', 'quarterly', 'yearly']
         if message_body in valid_choices:
-            subscription_plan = message_body.replace('_', ' ').capitalize()
-            request.session['subscription_choice'] = subscription_plan
+            subscription_plan = message_body.capitalize()
             send_whatsapp_message(phone_number, f"Thank you for selecting the {subscription_plan} plan!")
 
-            # Retrieve stored user details
-            first_name = request.session.get('first_name')
-            last_name = request.session.get('last_name')
-            phone = request.session.get('phone_number')
-
-            # Save client data
+            # Save client data to the database
             Client.objects.create(
-                phone_number=phone,
-                first_name=first_name,
-                last_name=last_name,
-                subscription_plan=subscription_plan
+                first_name=session_data.get('first_name'),
+                last_name=session_data.get('last_name'),
+                phone_number=session_data.get('phone_number'),
+                membership_type=message_body
             )
 
-            # Clear session after registration
+            # Clear session after successful registration
             request.session.flush()
-
-            # Send confirmation message
             send_whatsapp_message(
                 phone_number,
-                f"Thank you {first_name} {last_name}! Your phone number {phone} has been registered with the {subscription_plan} plan."
+                f"Registration complete! Thank you {session_data.get('first_name')} {session_data.get('last_name')}."
             )
-            return Response({'status': 'success', 'message': 'Registration complete'})
+            return Response({'status': 'success', 'message': 'Registration complete.'})
         else:
-            # Handle invalid subscription choice
-            send_whatsapp_message(phone_number, "Invalid choice. Please select a valid subscription option.")
-            return Response({'status': 'error', 'message': 'Invalid subscription choice'})
+            send_whatsapp_message(phone_number, "Invalid subscription choice. Please try again.")
+            return Response({'status': 'error', 'message': 'Invalid subscription choice.'})
 
-    send_whatsapp_message(phone_number, "Invalid command or stage. Please type valid command")
-    return Response({'status': 'error', 'message': 'Invalid command or stage'})
+    # Handle unknown stages or commands
+    send_whatsapp_message(phone_number, "Invalid command. Please type 'register-client' to start.")
+    return Response({'status': 'error', 'message': 'Invalid command.'})
+
 
 
