@@ -1,15 +1,18 @@
 from http.client import responses
 from multiprocessing.resource_tracker import register
 
+from django.core.mail.message import sanitize_address
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime, timedelta
 
-from .utils import send_whatsapp_message, send_subscription_options
+from .utils import send_whatsapp_message, send_subscription_options, send_command_buttons
 from .models import Client
 
-SESSION_TIMEOUT_SECONDS = 60
+import re
+
+SESSION_TIMEOUT_SECONDS = 300
 
 @csrf_exempt
 @api_view(['POST'])
@@ -59,16 +62,29 @@ def handle_whatsapp_message(request):
         return Response({'status': 'success', 'message': 'Phone number requested.'})
 
     if registration_stage == 'phone_number':
-        if message_body.isdigit() and len(message_body) == 10:
-            session_data['phone_number'] = message_body
-            session_data['stage'] = 'subscription'
-            session_data['stage_start_time'] = datetime.now().isoformat()  # Update stage start time
-            request.session.modified = True
-            send_subscription_options(phone_number)  # Send subscription options
-            return Response({'status': 'success', 'message': 'Subscription options sent.'})
+        sanitized_number = message_body.strip().replace(" ", "").replace("-", "")
+
+        #Add country code if missing
+        if not sanitized_number.startswith("+"):
+            sanitized_number = f"+91{sanitized_number}"
+        # Validate phone number
+        phone_number_pattern = re.compile(r"^\+?\d{10,15}$")
+        if phone_number_pattern.match(sanitized_number):
+            # Check for duplicates
+            if Client.objects.filter(phone_number=sanitized_number).exists():
+                send_whatsapp_message(phone_number, "This phone number is already registered.")
+                return Response({'status': 'error', 'message': 'Duplicate phone number'})
+
+            # Save valid number
+            request.session['phone_number'] = sanitized_number
+            print(sanitized_number)
+            request.session['registration_stage'] = 'subscription'
+            send_subscription_options(sanitized_number)
+            return Response({'status': 'success', 'message': 'Subscription options sent'})
         else:
-            send_whatsapp_message(phone_number, "Invalid phone number. Please try again.")
-            return Response({'status': 'error', 'message': 'Invalid phone number.'})
+            # Handle invalid number
+            send_whatsapp_message(phone_number, "Invalid phone number. Please enter a valid number.")
+            return Response({'status': 'error', 'message': 'Invalid phone number'})
 
     if registration_stage == 'subscription':
         valid_choices = ['monthly', 'quarterly', 'yearly']

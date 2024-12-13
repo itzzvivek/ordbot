@@ -1,9 +1,6 @@
-from ctypes.wintypes import PSIZE
-from http.client import responses
-
 from django.conf import settings
 from twilio.rest import Client
-import requests
+
 
 def send_whatsapp_message(to, body):
     client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
@@ -15,7 +12,7 @@ def send_whatsapp_message(to, body):
     return message.sid
 
 
-def send_subscription_options(phone_number):
+def send_subscription_options(to):
     """
     Sends subscription options as an interaction message via twilio api
     """
@@ -29,6 +26,16 @@ def send_subscription_options(phone_number):
     )
     client.messages.create(
         body=body,
-        from_=f'whatsapp:{settings.TWILIO_WHATSAPP_NUMBER_FROM}',
-        to=f'whatsapp:{phone_number}'
+        from_ = settings.TWILIO_WHATSAPP_NUMBER_FROM,
+        to=settings.TWILIO_WHATSAPP_NUMBER_TO,
     )
+
+def send_command_buttons(phone_number):
+    commands = [
+        {"label" : "Register Client", "value": "register-client"}
+    ]
+    message = "Welcome!*\nPlease choose a command below:"
+    for command in commands:
+        message += f"\n- {command['label']} (send'{command['value']}')"
+
+    send_whatsapp_message(phone_number, message)
