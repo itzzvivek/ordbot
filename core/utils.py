@@ -12,7 +12,7 @@ def send_whatsapp_message(to, body):
     return message.sid
 
 
-def send_subscription_options(to):
+def send_subscription_options(phone_number):
     """
     Sends subscription options as an interaction message via twilio api
     """
@@ -26,7 +26,7 @@ def send_subscription_options(to):
     )
     client.messages.create(
         body=body,
-        from_ = settings.TWILIO_WHATSAPP_NUMBER_FROM,
+        from_=settings.TWILIO_WHATSAPP_NUMBER_FROM,
         to=settings.TWILIO_WHATSAPP_NUMBER_TO,
     )
 

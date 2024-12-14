@@ -78,7 +78,9 @@ def handle_whatsapp_message(request):
             # Save valid number
             request.session['phone_number'] = sanitized_number
             print(sanitized_number)
-            request.session['registration_stage'] = 'subscription'
+            request.session['stage'] = 'subscription'
+            session_data['stage_start_time'] = datetime.now().isoformat()
+            request.session.modified = True
             send_subscription_options(sanitized_number)
             return Response({'status': 'success', 'message': 'Subscription options sent'})
         else:
