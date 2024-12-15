@@ -64,9 +64,10 @@ def handle_whatsapp_message(request):
     if registration_stage == 'phone_number':
         sanitized_number = message_body.strip().replace(" ", "").replace("-", "")
 
-        #Add country code if missing
+        # Add country code if missing
         if not sanitized_number.startswith("+"):
             sanitized_number = f"+91{sanitized_number}"
+
         # Validate phone number
         phone_number_pattern = re.compile(r"^\+?\d{10,15}$")
         if phone_number_pattern.match(sanitized_number):
@@ -75,16 +76,17 @@ def handle_whatsapp_message(request):
                 send_whatsapp_message(phone_number, "This phone number is already registered.")
                 return Response({'status': 'error', 'message': 'Duplicate phone number'})
 
-            # Save valid number
+            # Save valid number to session
             request.session['phone_number'] = sanitized_number
             print(sanitized_number)
-            request.session['stage'] = 'subscription'
+            session_data['stage'] = 'subscription'
             session_data['stage_start_time'] = datetime.now().isoformat()
-            request.session.modified = True
+            request.session.modified = True  # Ensure session changes persist
+            print(f"Stage set to subscription: {session_data['stage']}")
             send_subscription_options(sanitized_number)
             return Response({'status': 'success', 'message': 'Subscription options sent'})
         else:
-            # Handle invalid number
+            # Handle invalid phone number
             send_whatsapp_message(phone_number, "Invalid phone number. Please enter a valid number.")
             return Response({'status': 'error', 'message': 'Invalid phone number'})
 
@@ -92,7 +94,8 @@ def handle_whatsapp_message(request):
         valid_choices = ['monthly', 'quarterly', 'yearly']
         if message_body in valid_choices:
             subscription_plan = message_body.capitalize()
-            send_whatsapp_message(phone_number, f"Thank you for selecting the {subscription_plan} plan!")
+            print(f"User selected plan: {subscription_plan}")
+            # send_whatsapp_message(phone_number, f"Thank you for selecting the {subscription_plan} plan!")
 
             # Save client data to the database
             Client.objects.create(
@@ -110,12 +113,14 @@ def handle_whatsapp_message(request):
             )
             return Response({'status': 'success', 'message': 'Registration complete.'})
         else:
+            # Handle invalid subscription choice
             send_whatsapp_message(phone_number, "Invalid subscription choice. Please try again.")
             return Response({'status': 'error', 'message': 'Invalid subscription choice.'})
 
     # Handle unknown stages or commands
     send_whatsapp_message(phone_number, "Invalid command. Please type 'register-client' to start.")
     return Response({'status': 'error', 'message': 'Invalid command.'})
+
 
 
 
