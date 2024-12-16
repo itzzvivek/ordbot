@@ -62,6 +62,8 @@ def handle_whatsapp_message(request):
         return Response({'status': 'success', 'message': 'Phone number requested.'})
 
     if registration_stage == 'phone_number':
+        print(f"Processing phone number stage. Input: {message_body}")
+
         sanitized_number = message_body.strip().replace(" ", "").replace("-", "")
 
         # Add country code if missing
@@ -71,55 +73,70 @@ def handle_whatsapp_message(request):
         # Validate phone number
         phone_number_pattern = re.compile(r"^\+?\d{10,15}$")
         if phone_number_pattern.match(sanitized_number):
-            # Check for duplicates
             if Client.objects.filter(phone_number=sanitized_number).exists():
                 send_whatsapp_message(phone_number, "This phone number is already registered.")
                 return Response({'status': 'error', 'message': 'Duplicate phone number'})
 
             # Save valid number to session
-            request.session['phone_number'] = sanitized_number
-            print(sanitized_number)
+            session_data['phone_number'] = sanitized_number
             session_data['stage'] = 'subscription'
             session_data['stage_start_time'] = datetime.now().isoformat()
-            request.session.modified = True  # Ensure session changes persist
-            print(f"Stage set to subscription: {session_data['stage']}")
+            request.session.modified = True
+            print(f"Session after phone number stage: {request.session.items()}")
+
+            # Send subscription options
             send_subscription_options(sanitized_number)
             return Response({'status': 'success', 'message': 'Subscription options sent'})
         else:
-            # Handle invalid phone number
-            send_whatsapp_message(phone_number, "Invalid phone number. Please enter a valid number.")
+            send_whatsapp_message(phone_number, "Invalid phone number. Please try again.")
             return Response({'status': 'error', 'message': 'Invalid phone number'})
 
     if registration_stage == 'subscription':
+        print(f"Processing subscription stage. Input: {message_body}")
+
         valid_choices = ['monthly', 'quarterly', 'yearly']
         if message_body in valid_choices:
-            subscription_plan = message_body.capitalize()
+            subscription_plan = message_body
             print(f"User selected plan: {subscription_plan}")
-            # send_whatsapp_message(phone_number, f"Thank you for selecting the {subscription_plan} plan!")
 
-            # Save client data to the database
-            Client.objects.create(
-                first_name=session_data.get('first_name'),
-                last_name=session_data.get('last_name'),
-                phone_number=session_data.get('phone_number'),
-                membership_type=message_body
-            )
+            # Validate session data
+            registration_data = request.session.get('registration_data', {})
+            if not all(key in registration_data for key in ['first_name', 'last_name', 'phone_number']):
+                send_whatsapp_message(phone_number, "Session data missing. Please restart the process.")
+                return Response({'status': 'error', 'message': 'Session data incomplete.'})
+
+            # Save client data
+            try:
+                Client.objects.create(
+                    first_name=registration_data['first_name'],
+                    last_name=registration_data['last_name'],
+                    phone_number=registration_data['phone_number'],
+                    membership_type=subscription_plan
+                )
+                print("Client saved successfully.")
+            except Exception as e:
+                print(f"Error saving client: {e}")
+                send_whatsapp_message(phone_number, "Error saving data. Please try again.")
+                return Response({'status': 'error', 'message': 'Database error.'})
 
             # Clear session after successful registration
-            request.session.flush()
             send_whatsapp_message(
-                phone_number,
-                f"Registration complete! Thank you {session_data.get('first_name')} {session_data.get('last_name')}."
+                registration_data['phone_number'],
+                f"Registration complete! Thank you {registration_data['first_name']} {registration_data['last_name']}."
             )
+            request.session.flush()
             return Response({'status': 'success', 'message': 'Registration complete.'})
         else:
-            # Handle invalid subscription choice
             send_whatsapp_message(phone_number, "Invalid subscription choice. Please try again.")
             return Response({'status': 'error', 'message': 'Invalid subscription choice.'})
 
     # Handle unknown stages or commands
     send_whatsapp_message(phone_number, "Invalid command. Please type 'register-client' to start.")
     return Response({'status': 'error', 'message': 'Invalid command.'})
+
+
+
+
 
 
 
