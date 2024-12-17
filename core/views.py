@@ -1,6 +1,7 @@
 from http.client import responses
 from multiprocessing.resource_tracker import register
 
+from aiohttp.log import client_logger
 from django.conf import settings
 from django.core.mail.message import sanitize_address
 from rest_framework.decorators import api_view
@@ -8,10 +9,27 @@ from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from datetime import datetime, timedelta
 
-from .utils import send_whatsapp_message, send_subscription_options, send_command_buttons
+from .utils import send_whatsapp_message, send_subscription_options, send_interactive_message
 from .models import Client
 
 import re
+
+def handle_initial_command(request, message_body, phone_number):
+    """
+    Handles initial greetings and responds with available commands as buttons
+    """
+
+    greetings = ['hello', 'hii', 'hey', 'hi']
+
+    if message_body.lower() in greetings:
+        response_message = "Welcome! Choose an action below:"
+        buttons = [
+            {"type": "reply", "title": "Register Client", "payload": "register-client"},
+            {"type": "reply", "title": "help", "payload": "help"}
+        ]
+        send_interactive_message(phone_number, response_message, buttons)
+        return Response({'status': 'success', 'message': 'Interactive buttons sent.'})
+    return Response({'status': 'success', 'message': 'Invalid greetings'})
 
 
 @csrf_exempt
@@ -126,6 +144,8 @@ def handle_whatsapp_message(request):
         else:
             send_whatsapp_message(phone_number, "Invalid subscription choice. Please try again.")
             return Response({'status': 'error', 'message': 'Invalid subscription choice.'})
+
+        auth_token_promation = client_logger.v1.auth_token_promotions().update()
 
     # Handle unknown stages or commands
     send_whatsapp_message(phone_number, "Invalid command. Please type 'register-client' to start.")

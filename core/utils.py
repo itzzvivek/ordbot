@@ -30,6 +30,36 @@ def send_subscription_options(phone_number):
         to=settings.TWILIO_WHATSAPP_NUMBER_TO,
     )
 
+
+def send_interactive_message(phone_number, message, buttons):
+    """
+    send and interactive message with buttons using whatsApp API.
+    """
+
+    button_payload = {
+        "to": phone_number,
+        "type": "interactive",
+        "interactive":{
+            "type": "button",
+            "body": {"text": message},
+            "action": {
+                "buttons":{
+                    {
+                        "type": "reply",
+                        "reply":{
+                            "id": button["payload"],
+                            "title": button["title"],
+                        },
+                    }
+                    for button in buttons
+                }
+            },
+        },
+    }
+    print(f"payload to send: {button_payload}")
+    print(f"Interactive message sent to {phone_number}: {message}")
+
+
 def send_command_buttons(phone_number):
     commands = [
         {"label" : "Register Client", "value": "register-client"}
@@ -39,3 +69,5 @@ def send_command_buttons(phone_number):
         message += f"\n- {command['label']} (send'{command['value']}')"
 
     send_whatsapp_message(phone_number, message)
+
+
