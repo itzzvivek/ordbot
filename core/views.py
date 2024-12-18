@@ -1,9 +1,6 @@
 from http.client import responses
-from multiprocessing.resource_tracker import register
 
-from aiohttp.log import client_logger
 from django.conf import settings
-from django.core.mail.message import sanitize_address
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
@@ -11,17 +8,20 @@ from datetime import datetime, timedelta
 
 from .utils import send_whatsapp_message, send_subscription_options, send_interactive_message
 from .models import Client
-
 import re
 
-def handle_initial_command(request, message_body, phone_number):
+@csrf_exempt
+@api_view(['POST'])
+def handle_whatsapp_messages(request):
     """
     Handles initial greetings and responds with available commands as buttons
     """
+    phone_number = request.data.get('From', '').replace('whatsapp:', '')
+    message_body = request.data.get('Body', '').strip().lower()
 
     greetings = ['hello', 'hii', 'hey', 'hi']
 
-    if message_body.lower() in greetings:
+    if message_body in greetings:
         response_message = "Welcome! Choose an action below:"
         buttons = [
             {"type": "reply", "title": "Register Client", "payload": "register-client"},
@@ -29,12 +29,17 @@ def handle_initial_command(request, message_body, phone_number):
         ]
         send_interactive_message(phone_number, response_message, buttons)
         return Response({'status': 'success', 'message': 'Interactive buttons sent.'})
-    return Response({'status': 'success', 'message': 'Invalid greetings'})
+
+    # handle buttons action and commands
+    elif message_body == "register-client":
+        return register_client(request)
+    send_whatsapp_message(phone_number, "Unknown commands. Please type 'Hi' to start")
+    return Response({'status': 'error', 'message': 'Unknown command'})
 
 
 @csrf_exempt
 @api_view(['POST'])
-def handle_whatsapp_message(request):
+def register_client(request):
     phone_number = request.data.get('From', '').replace('whatsapp:', '')
     message_body = request.data.get('Body', '').strip().lower()
 
@@ -144,8 +149,6 @@ def handle_whatsapp_message(request):
         else:
             send_whatsapp_message(phone_number, "Invalid subscription choice. Please try again.")
             return Response({'status': 'error', 'message': 'Invalid subscription choice.'})
-
-        auth_token_promation = client_logger.v1.auth_token_promotions().update()
 
     # Handle unknown stages or commands
     send_whatsapp_message(phone_number, "Invalid command. Please type 'register-client' to start.")
