@@ -21,22 +21,17 @@ def send_interactive_message(phone_number, body, buttons):
     """
     Sends an interactive WhatsApp message with buttons.
     """
-
-    # Ensure that the phone number is prefixed with 'whatsapp:' and properly formatted
     to_number = f"whatsapp:{phone_number}"
-    print(f"To Number: {to_number}")  # Debugging to check the formatted phone number
 
+    # Twilio API URL
     url = f"https://api.twilio.com/2010-04-01/Accounts/{settings.TWILIO_ACCOUNT_SID}/Messages.json"
-    print(f"URL: {url}")  # Debugging the URL
 
-    # Use HTTPBasicAuth to handle authentication with SID and Auth Token
     auth = HTTPBasicAuth(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
-    # Prepare the payload for the interactive message
     payload = {
-        "to": to_number,  # The recipient phone number with 'whatsapp:' prefix
-        "from": settings.TWILIO_WHATSAPP_NUMBER_FROM,  # Your Twilio WhatsApp number
-        "interactive": {
+        "To": to_number,
+        "From": settings.TWILIO_WHATSAPP_NUMBER_FROM,
+        "Interactive": {
             "type": "button",
             "header": {"type": "text", "text": body},
             "body": {"text": body},
@@ -49,16 +44,15 @@ def send_interactive_message(phone_number, body, buttons):
         },
     }
 
-    # Send the POST request to Twilio API
     response = requests.post(url, json=payload, headers={"Content-Type": "application/json"}, auth=auth)
 
-    # Handle the response
-    if response.status_code != 200:
-        print(f"Error sending message: {response.text}")
+    if response.status_code != 201:
+        print(f"Error sending message: {response.status_code} - {response.text}")
     else:
         print(f"Message sent successfully with SID: {response.json().get('sid')}")
 
     return response
+
 
 
 def send_subscription_options(phone_number):
