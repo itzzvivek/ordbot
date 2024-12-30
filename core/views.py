@@ -25,7 +25,9 @@ def handle_whatsapp_messages(request):
             {"type": "reply", "title": "Register Client", "payload": "register-client"},
             {"type": "reply", "title": "help", "payload": "help"}
         ]
-        send_interactive_message(phone_number, response_message, buttons)
+        template_name = "fitbot_template"
+        parameters = {"body": response_message}
+        send_interactive_message(phone_number, template_name, parameters, buttons)
         return Response({'status': 'success', 'message': 'Interactive buttons sent.'})
 
     # handle buttons action and commands
