@@ -1,8 +1,6 @@
 from django.urls import path
-from .views import handle_whatsapp_messages
 
 urlpatterns = [
-    path('handle_whatsapp_message/', handle_whatsapp_messages, name='handle-messages'),
 ]
 
 # path('register-client/', register_client, name='register_client'),
