@@ -79,9 +79,32 @@ def get_payment_link(order) -> str | None:
 
         link = client.payment_link.create(payload)
         logger.info(f"Payment link created: {link['short_url']}")
-
-        return link['short_url']
+        return link.get('short_url')
     
     except Exception as e:
-        logger.error(f"Payment link creation failed(e)")
+        logger.error(f"Payment link creation failed: {e}")
         return None
+    
+def get_payment_qr_url(razorpay_order_id: str) -> str | None:
+    """
+    Generate a UPI QR code image URL via Razorpay
+    Returns a hosted image URL or None
+    """
+
+    try:
+        client = _get_client()
+        qr = client.qrcode.create({
+            'type': 'upi_qr',
+            'name': 'Bot Restaurant',
+            'usage': 'single_use',
+            'fixed_amount': True,
+            'payment_amount': None, #linked via order
+            'description': f"order {razorpay_order_id}",
+            'close_by': Name,
+        })
+        return qr.get('image_url')
+    except Exception as e:
+        logger.warning(f"Qr code generation failed (non-critical): {e}")
+        return None
+
+        
