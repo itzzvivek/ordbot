@@ -105,7 +105,7 @@ def _build_payment_message(order: Order, qr_url: str = None, payment_link: str =
 
 
 # Handler for incoming messages
-def handler_message(sender_phone: str, incoming_text: str) -> dict:
+def handle_message(sender_phone: str, incoming_text: str) -> dict:
     """
     Main entry point
     Returns a dict:
