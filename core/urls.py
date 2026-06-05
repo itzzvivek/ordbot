@@ -1,9 +1,8 @@
 from django.urls import path
+from . import views 
 
 urlpatterns = [
+    path('whatsapp/', views.whatsapp_webhook,  name='whatsapp_webhook'),
+    path('payment/webhook/', views.razorpay_webhook,  name='razorpay_webhook'),
+    path('payment/callback/', views.payment_callback,  name='payment_callback'),
 ]
-
-# path('register-client/', register_client, name='register_client'),
-# path('check-in/', check_in, name='check_in'),
-# path('my-plan/', subscription_status, name='subscription_status'),
-# path('notify-expiring-subscription/', notify_expiring_subscriptions, name='notify_expiring_subscriptions'),

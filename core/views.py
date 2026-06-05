@@ -161,4 +161,52 @@ def payment_callback(request):
         """
     return HttpResponse(html)
 
-    
+# Helper send whatsapp message from twilio
+def _send_whatsapp(to_phone: str, message: str, media_url: str = None):
+    """Send an outbound WhatsApp message via Twilio REST API."""
+    try:
+        from twilio.rest import Client
+        from django.conf import settings
+
+        client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
+
+        kwargs = {
+            'from_': f"whatsapp:{settings.TWILIO_WHATSAPP_NUMBER}",
+            'to':    to_phone,
+            'body':  message,
+        }
+        if media_url:
+            kwargs['media_url'] = [media_url]
+
+        client.messages.create(**kwargs)
+    except Exception as e:
+        logger.error(f"Failed to send WhatsApp to {to_phone}: {e}")
+
+
+def _send_success_whatsapp(order: Order):
+    """Send order confirmed message after payment."""
+    user = order.user
+    items_text = '\n'.join(
+        f"  • {oi.quantity}x {oi.item.emoji} {oi.item.name}"
+        for oi in order.orderitem_set.select_related('item').all()
+    )
+    msg = (
+        f"🎉 *Payment Confirmed! Thank you, {user.first_name}!*\n\n"
+        f"✅ *Order #{str(order.order_id)[:8].upper()} is confirmed!*\n\n"
+        f"🍽️ *Items:*\n{items_text}\n\n"
+        f"💰 *Total Paid: ₹{order.total_amount}*\n\n"
+        f"📍 *Delivering to:*\n{user.address}\n\n"
+        f"⏱️ *Estimated delivery: 30–45 minutes*\n\n"
+        f"Thank you for ordering from FitBot Restaurant! 🙏"
+    )
+    _send_whatsapp(user.phone, msg)
+
+
+def _send_payment_failed_whatsapp(order: Order):
+    """Notify user about payment failure."""
+    msg = (
+        f"❌ *Payment Failed*\n\n"
+        f"Your payment for Order #{str(order.order_id)[:8].upper()} could not be processed.\n\n"
+        f"Please type *confirm* to try again, or *cancel* to cancel your order."
+    )
+    _send_whatsapp(order.user.phone, msg)
