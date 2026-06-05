@@ -47,3 +47,41 @@ def create_razorpay_order(order) -> dict:
         logger.error(f"Razorpay order created: {rz_order['id']} for Order {order.order_id}")
         return rz_order
     
+def get_payment_link(order) -> str | None:
+    """
+    Creates Razorpay Payment Link and returns the short URL
+    This link can be sent via Whatsapp for easy payment.
+    """
+    try:
+        client = _get_client()
+        amount_paise = int(order.total_amount * 100)
+
+        payload = {
+            'amount': amount_paise,
+            'currency': 'INR',
+            'accept_partial': False,
+            'description': f'bot for Order #{str(order.order_id)[:8].upper()}',
+            'customer': {
+                'name': order.user.full_name,
+                'contact': order.user.contact_number,
+            },
+            'notify': {
+                'sms': True,
+                'email': False
+            },
+            'reminder_enable': False,
+            'notes':{
+                'order_uuid': str(order.order_id),
+            },
+            'callback_url': f"{settings.BASE_URL}/payment/callback/",
+            'callback_method': 'get'   
+        }
+
+        link = client.payment_link.create(payload)
+        logger.info(f"Payment link created: {link['short_url']}")
+
+        return link['short_url']
+    
+    except Exception as e:
+        logger.error(f"Payment link creation failed(e)")
+        return None
