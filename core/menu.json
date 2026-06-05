@@ -1,0 +1,68 @@
+[
+    {
+        "model": "core.menuitem",
+        "pk": 1,
+        "fields": {
+            "name": "Chicken Burger",
+            "description": "Juicy grilled chicken with lettuce & sauce",
+            "price": "120.00",
+            "is_available": true,
+            "emoji": "🍔"
+        }
+    },
+    {
+        "model": "core.menuitem",
+        "pk": 2,
+        "fields": {
+            "name": "Veggie Pizza",
+            "description": "Garden fresh veggies on crispy base",
+            "price": "250.00",
+            "is_available": true,
+            "emoji": "🍕"
+        }
+    },
+    {
+        "model": "core.menuitem",
+        "pk": 3,
+        "fields": {
+            "name": "Paneer Roll",
+            "description": "Soft roll with spiced paneer filling",
+            "price": "90.00",
+            "is_available": true,
+            "emoji": "🌯"
+        }
+    },
+    {
+        "model": "core.menuitem",
+        "pk": 4,
+        "fields": {
+            "name": "Masala Fries",
+            "description": "Crispy fries with desi masala seasoning",
+            "price": "70.00",
+            "is_available": true,
+            "emoji": "🍟"
+        }
+    },
+    {
+        "model": "core.menuitem",
+        "pk": 5,
+        "fields": {
+            "name": "Cold Coffee",
+            "description": "Chilled blended coffee with cream",
+            "price": "80.00",
+            "is_available": true,
+            "emoji": "☕"
+        }
+    },
+    {
+        "model": "core.menuitem",
+        "pk": 6,
+        "fields": {
+            "name": "Fresh Juice",
+            "description": "Seasonal fresh fruit juice",
+            "price": "60.00",
+            "is_available": true,
+            "emoji": "🥤"
+        }
+    }
+]
