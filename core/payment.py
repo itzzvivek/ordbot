@@ -100,11 +100,19 @@ def get_payment_qr_url(razorpay_order_id: str) -> str | None:
             'fixed_amount': True,
             'payment_amount': None, #linked via order
             'description': f"order {razorpay_order_id}",
-            'close_by': Name,
+            'close_by': None,
         })
         return qr.get('image_url')
     except Exception as e:
         logger.warning(f"Qr code generation failed (non-critical): {e}")
         return None
 
-        
+def verify_webhook_signature(payload_body: bytes, signature: str) -> bool:
+    """
+    Verifies the Razorpay webhook signature using HMAC-SHA256.
+    call this in the webhook view before processing
+    """
+    secret = settings.RAZORPAY_WEBHOOK_SECRET.encode('utf-8')
+    expected = hmac.new(secret, payload_body, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
