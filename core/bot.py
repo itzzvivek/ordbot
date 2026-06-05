@@ -103,3 +103,45 @@ def _build_payment_message(order: Order, qr_url: str = None, payment_link: str =
     )
     return msg
 
+# Handler for incoming messages
+def handler_message(sender_phone: str, incoming_text: str) -> dict:
+    """
+    Main entry point
+    Returns a dict:
+        {
+            "text": str, # always present
+            "media_url": str | None, # QR image URL if applicable
+            "payment_link": str | None, # Razorpay Link
+        }
+    """
+
+    text = incoming_text.strip()
+    text_lower = text.lower()
+
+    response = {'text': '', 'media_url': None, 'payment_link': None}
+
+    # cancel command
+
+    if text_lower == 'cancel':
+        session, _ = UserSession.objects.get_or_create(phone_number=sender_phone)
+        # cancel any pending orders
+        Order.objects.filter(user=session.user, status='pending').update(status='cancelled')
+        session.state = 'start'
+        session.save()
+        response['text'] = ("Your current order has been cancelled.\n\n" 
+                            "If you'd like to start a new order, just say hi! 👋")
+        return response
+    
+    # get or create session
+
+    session, created = UserSession.objects.get_or_create(phone_number=sender_phone)
+
+    # Greeting -> restart if already completed
+
+    if _is_greeting(text_lower):
+        if session.state in ('completed', 'new', ''):
+            session.state = 'ask_firstname'
+            session.save()
+            response['text'] = WELCOME_MSG
+    else:
+        
