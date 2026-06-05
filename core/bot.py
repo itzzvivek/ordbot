@@ -24,7 +24,7 @@ HELP_MSG = (
     "Type *cancel* to cancel your current order."
 )
 
-def greeting(text: str) -> bool:
+def _is_greeting(text: str) -> bool:
     return text.lower().strip() in GREETING_KEYWORDS
 
 def _build_menu_text()-> str:
@@ -103,6 +103,7 @@ def _build_payment_message(order: Order, qr_url: str = None, payment_link: str =
     )
     return msg
 
+
 # Handler for incoming messages
 def handler_message(sender_phone: str, incoming_text: str) -> dict:
     """
@@ -143,5 +144,198 @@ def handler_message(sender_phone: str, incoming_text: str) -> dict:
             session.state = 'ask_firstname'
             session.save()
             response['text'] = WELCOME_MSG
-    else:
+        else:
+            response['text'] = (
+                f"👋 Hey {session.first_name or 'there'}! "
+                f"You have an order in progress.\n\n"
+                f"Type *cancel* to restart or continue from where you left off."
+            )
+        return response
+
+    # state machine
+
+    state = session.state
+
+    # New user who did not say hi
+    
+    if state == 'new':
+        response['text'] = HELP_MSG
+        return response
+    
+    # ASK FIRST NAME 
+    if state == 'ask_firstname':
+        if len(text) < 2:
+            response['text'] = "Please enter a valid first name."
+            return response
+        session.first_name = text.title()            
+        session.state = 'ask _lastname'
+        session.save()
+        response['text'] = f"Nice to meet you, *{session.first_name}*! 😊\n\nWhat's your *last name*?"
+        return response
+    
+    # ASk LAST NAME
+    if state == 'ask_lastname':
+        if len(text) < 2:
+            response['text'] = "Please enter a valid last name."
+            return response
+        session.last_name = text.title()
+        session.state = 'ask_address'
+        session.save()
+        response['text'] = (
+            f"Great, *{session.full_name}*! 🎉\n\n"
+            f"📍 Please share your *delivery address*:\n"
+            f"_(Include street, area, city and pincode)_"
+        )
+        return response
+    
+    # ASK ADDRESS
+    if state == 'ask_address':
+        if len(text) < 10:
+            response['text'] = "Please enter a complete delivery address (at least 10 characters)."
+            return response
+        session.address = text
+        session.state = 'ask_phone'
+        session.save()
+        response['text'] = (
+            "📞 Almost there! What's your *contact phone number*?\n"
+            "_(We'll call you only if needed for delivery)_"
+        )
+        return response
+    
+    # ASK PHONE
+    if state == 'ask_phone':
+        digits = re.sub(r'\D', '', text)
+        if len(digits) < 10:
+            response['text'] = "Please enter a valid phone number (at least 10 digits)."
+            return response
+        session.contact_phone = digits
+        session.state = 'show_menu'
+        session.save()
+        response['text'] = (
+            f"✅ *Details saved!*\n\n"
+            f"👤 Name: {session.full_name}\n"
+            f"📍 Address: {session.address}\n"
+            f"📞 Phone: {session.contact_phone}\n\n"
+            f"Here's our menu! 👇\n\n"
+            + _build_menu_text()
+        )
+        return response
+    
+    # SHOW MENU / AWAITING ORDER
+    if state in ('show_menu', 'awaiting_order'):
+        if text_lower == 'menu':
+            response['text'] = _build_menu_text()
+            return response
+ 
+        selections = _parse_order_input(text)
+        if not selections:
+            response['text'] = (
+                "❓ I didn't understand that.\n\n"
+                + _build_menu_text()
+            )
+            return response
+ 
+        menu_items = list(MenuItem.objects.filter(is_available=True).order_by('id'))
+        max_idx = len(menu_items)
+        invalid = [i for i in selections if i < 1 or i > max_idx]
+        if invalid:
+            response['text'] = (
+                f"⚠️ Item numbers {invalid} don't exist. Please choose from 1 to {max_idx}.\n\n"
+                + _build_menu_text()
+            )
+            return response
         
+        # Create / replace pending order
+        Order.objects.filter(user=session, status='pending').delete()
+        order = Order.objects.create(user=session)
+ 
+        for idx, qty in selections.items():
+            item = menu_items[idx - 1]
+            OrderItem.objects.create(order=order, item=item, quantity=qty)
+ 
+        order.calculate_total()
+        session.state = 'confirm_order'
+        session.save()
+ 
+        summary = _build_order_summary(order)
+        response['text'] = (
+            f"{summary}\n\n"
+            f"✅ Type *confirm* to proceed to payment.\n"
+            f"✏️ Type *menu* to change your order.\n"
+            f"❌ Type *cancel* to cancel."
+        )
+        return response
+    
+        # CONFIRM ORDER
+    if state == 'confirm_order':
+        if text_lower == 'menu':
+            session.state = 'show_menu'
+            session.save()
+            response['text'] = _build_menu_text()
+            return response
+ 
+        if text_lower != 'confirm':
+            response['text'] = (
+                "Please type *confirm* to proceed to payment, "
+                "*menu* to change your order, or *cancel* to cancel."
+            )
+            return response
+ 
+        # Create Razorpay order
+        order = Order.objects.filter(user=session, status='pending').last()
+        if not order:
+            session.state = 'show_menu'
+            session.save()
+            response['text'] = "Oops! Your order was lost. Please select items again.\n\n" + _build_menu_text()
+            return response
+ 
+        from .payment import create_razorpay_order, get_payment_qr_url, get_payment_link
+        rz_order = create_razorpay_order(order)
+ 
+        if rz_order:
+            order.razorpay_order_id = rz_order['id']
+            order.save()
+            session.state = 'awaiting_payment'
+            session.save()
+ 
+            qr_url = get_payment_qr_url(rz_order['id'])
+            payment_link = get_payment_link(order)
+            response['text'] = _build_payment_message(order, qr_url, payment_link)
+            response['media_url'] = qr_url
+            response['payment_link'] = payment_link
+        else:
+            response['text'] = (
+                "⚠️ Payment gateway error. Please try again.\n"
+                "Type *confirm* to retry."
+            )
+        return response
+ 
+    # AWAITING PAYMENT
+    if state == 'awaiting_payment':
+        order = Order.objects.filter(user=session, status='pending').last()
+        if not order:
+            response['text'] = (
+                "✅ Your order may already be confirmed! "
+                "Check for a success message or type *hi* to start a new order."
+            )
+            return response
+ 
+        response['text'] = (
+            f"⏳ We're waiting for payment confirmation for Order "
+            f"`{str(order.order_id)[:8].upper()}`.\n\n"
+            f"Once you complete the payment, we'll automatically confirm your order.\n\n"
+            f"Type *cancel* if you want to cancel."
+        )
+        return response
+ 
+    # COMPLETED
+    if state == 'completed':
+        response['text'] = (
+            "🎉 Your last order was completed!\n\n"
+            "Type *hi* to place a new order. 😊"
+        )
+        return response
+ 
+    # Fallback
+    response['text'] = HELP_MSG
+    return response
