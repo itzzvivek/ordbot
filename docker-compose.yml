@@ -1,19 +1,53 @@
-# docker-compose.yml (fill this in)
-version: '3.9'
 services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────
+  db:
+    image: postgres:15
+    restart: unless-stopped
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB:       ${DB_NAME:-fitbot}
+      POSTGRES_USER:     ${DB_USER:-fitbot}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fitbot}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-fitbot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Django App ───────────────────────────────────────────────────
   web:
     build: .
-    command: python manage.py runserver 0.0.0.0:8000
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+            python manage.py loaddata core/fixtures/menu.json --ignorenonexistent &&
+            python manage.py runserver 0.0.0.0:8000"
     volumes:
       - .:/app
     ports:
       - "8000:8000"
-    env_file: .env
-    depends_on:
-      - db
-  db:
-    image: postgres:15
+    env_file:
+      - .env
     environment:
-      POSTGRES_DB: fitbot
-      POSTGRES_USER: fitbot
-      POSTGRES_PASSWORD: fitbot
+      DJANGO_SETTINGS_MODULE: fitbot.settings
+      DB_HOST: db
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # ── ngrok tunnel ─────────────────────────────────────────────────
+  ngrok:
+    image: ngrok/ngrok
+    restart: unless-stopped
+    command: http web:8000 --log=stdout
+    ports:
+      - "4040:4040"
+    environment:
+      NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN:-}
+    depends_on:
+      - web
+
+volumes:
+  postgres_data:

@@ -29,9 +29,9 @@ SESSION_TIMEOUT = 300
 SECRET_KEY = 'django-insecure-7i*i+ib#x!*7miic_6aqygox*+sknp!gf-p7y_^lc4!^45si!a'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
-
-ALLOWED_HOSTS = ["*"]
+DEBUG      = os.environ.get('DEBUG', 'True') == 'True'
+ 
+ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '*').split(',')
 
 
 # Application definition

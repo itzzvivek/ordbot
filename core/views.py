@@ -9,8 +9,8 @@ import json
 import logging
 
 from django.http import HttpResponse, JsonResponse
-from django.views.decoreators.csrf import csrf_exempt
-from django.views.decoreators.https import require_POST, require_GET
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_POST, require_GET
 from twilio.twiml.messaging_response import MessagingResponse
 
 from .bot import handle_message
