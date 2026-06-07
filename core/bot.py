@@ -124,10 +124,14 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
     # cancel command
 
     if text_lower == 'cancel':
-        session, _ = UserSession.objects.get_or_create(phone_number=sender_phone)
+        session, _ = UserSession.objects.get_or_create(phone=sender_phone)
         # cancel any pending orders
-        Order.objects.filter(user=session.user, status='pending').update(status='cancelled')
-        session.state = 'start'
+        Order.objects.filter(user=session, status='pending').update(status='cancelled')
+        session.state = 'new'
+        session.first_name = ''
+        session.last_name = ''
+        session.address = ''
+        session.contact_number = ''
         session.save()
         response['text'] = ("Your current order has been cancelled.\n\n" 
                             "If you'd like to start a new order, just say hi! 👋")
@@ -135,7 +139,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
     
     # get or create session
 
-    session, created = UserSession.objects.get_or_create(phone_number=sender_phone)
+    session, created = UserSession.objects.get_or_create(phone=sender_phone)
 
     # Greeting -> restart if already completed
 
@@ -226,7 +230,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
         if text_lower == 'menu':
             response['text'] = _build_menu_text()
             return response
- 
+
         selections = _parse_order_input(text)
         if not selections:
             response['text'] = (
@@ -234,7 +238,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
                 + _build_menu_text()
             )
             return response
- 
+
         menu_items = list(MenuItem.objects.filter(is_available=True).order_by('id'))
         max_idx = len(menu_items)
         invalid = [i for i in selections if i < 1 or i > max_idx]
@@ -248,15 +252,15 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
         # Create / replace pending order
         Order.objects.filter(user=session, status='pending').delete()
         order = Order.objects.create(user=session)
- 
+
         for idx, qty in selections.items():
             item = menu_items[idx - 1]
             OrderItem.objects.create(order=order, item=item, quantity=qty)
- 
+
         order.calculate_total()
         session.state = 'confirm_order'
         session.save()
- 
+
         summary = _build_order_summary(order)
         response['text'] = (
             f"{summary}\n\n"
@@ -273,14 +277,14 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             session.save()
             response['text'] = _build_menu_text()
             return response
- 
+
         if text_lower != 'confirm':
             response['text'] = (
                 "Please type *confirm* to proceed to payment, "
                 "*menu* to change your order, or *cancel* to cancel."
             )
             return response
- 
+
         # Create Razorpay order
         order = Order.objects.filter(user=session, status='pending').last()
         if not order:
@@ -288,16 +292,16 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             session.save()
             response['text'] = "Oops! Your order was lost. Please select items again.\n\n" + _build_menu_text()
             return response
- 
+
         from .payment import create_razorpay_order, get_payment_qr_url, get_payment_link
         rz_order = create_razorpay_order(order)
- 
+
         if rz_order:
             order.razorpay_order_id = rz_order['id']
             order.save()
             session.state = 'awaiting_payment'
             session.save()
- 
+
             qr_url = get_payment_qr_url(rz_order['id'])
             payment_link = get_payment_link(order)
             response['text'] = _build_payment_message(order, qr_url, payment_link)
@@ -309,7 +313,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
                 "Type *confirm* to retry."
             )
         return response
- 
+
     # AWAITING PAYMENT
     if state == 'awaiting_payment':
         order = Order.objects.filter(user=session, status='pending').last()
@@ -319,7 +323,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
                 "Check for a success message or type *hi* to start a new order."
             )
             return response
- 
+
         response['text'] = (
             f"⏳ We're waiting for payment confirmation for Order "
             f"`{str(order.order_id)[:8].upper()}`.\n\n"
@@ -327,7 +331,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             f"Type *cancel* if you want to cancel."
         )
         return response
- 
+
     # COMPLETED
     if state == 'completed':
         response['text'] = (
@@ -335,7 +339,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             "Type *hi* to place a new order. 😊"
         )
         return response
- 
+
     # Fallback
     response['text'] = HELP_MSG
     return response
