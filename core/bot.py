@@ -83,7 +83,7 @@ def _build_order_summary(order: Order) -> str:
         f"\n📦 *Deliver to:*\n"
         f"  {order.user.full_name}\n"
         f"  {order.user.address}\n"
-        f"  📞 {order.user.contact_phone}"
+        f"  📞 {order.user.contact_number}"
     )
     return "\n".join(lines)
 
@@ -146,6 +146,10 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
     if _is_greeting(text_lower):
         if session.state in ('completed', 'new', ''):
             session.state = 'ask_firstname'
+            session.first_name = ''
+            session.last_name  = ''
+            session.address    = ''
+            session.contact_phone = ''
             session.save()
             response['text'] = WELCOME_MSG
         else:
@@ -157,11 +161,10 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
         return response
 
     # state machine
-
-    state = session.state
+    state = session.state.strip()
+    logger.warning(f"DEBUG >>> phone={sender_phone} state=[{state}] repr={repr(session.state)} text=[{text}]")
 
     # New user who did not say hi
-    
     if state == 'new':
         response['text'] = HELP_MSG
         return response
@@ -172,7 +175,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             response['text'] = "Please enter a valid first name."
             return response
         session.first_name = text.title()            
-        session.state = 'ask _lastname'
+        session.state = 'ask_lastname'
         session.save()
         response['text'] = f"Nice to meet you, *{session.first_name}*! 😊\n\nWhat's your *last name*?"
         return response
