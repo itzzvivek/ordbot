@@ -261,6 +261,8 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             OrderItem.objects.create(order=order, item=item, quantity=qty)
 
         order.calculate_total()
+        logger.warning(f"DEBUG TOTAL >>> items={list(order.orderitem_set.values("quantity","item__price"))} total_amount={order.total_amount}")
+        order.refresh_from_db()
         session.state = 'confirm_order'
         session.save()
 

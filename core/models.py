@@ -71,7 +71,10 @@ class Order(models.Model):
         return f"Order #{str(self.order_id)[:8]} - {self.user.full_name} - ₹{self.total_amount}"
     
     def calculate_total(self):
-        total = sum(item.price for item in self.items.all())
+        from decimal import Decimal
+        total = Decimal('0.00')
+        for oi in self.orderitem_set.select_related('item').all():
+            total += oi.item.price * oi.quantity
         self.total_amount = total
         self.save()
         return total
