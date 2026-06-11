@@ -307,7 +307,8 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             session.state = 'awaiting_payment'
             session.save()
 
-            qr_url = get_payment_qr_url(rz_order['id'])
+            amount_paise = int(order.total_amount * 100)
+            qr_url = get_payment_qr_url(rz_order['id'], amount_paise)
             payment_link = get_payment_link(order)
             response['text'] = _build_payment_message(order, qr_url, payment_link)
             response['media_url'] = qr_url

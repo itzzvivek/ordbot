@@ -84,10 +84,10 @@ def razorpay_webhook(request):
     logger.info(f"Razorpay webhook received: {event_type}")
 
     # Handle payment.captured (order is paid)
-    if event_type == "payment.captured":
+    if event_type == 'payment.captured':
         payment = event['payload']['payment']['entity']
-        payment_id = payment.get['id']
-        rz_order_id = payment.get['order_id']
+        payment_id = payment.get('id')
+        rz_order_id = payment.get('order_id')
         notes = payment.get('notes', {})
         order_uuid = notes.get('order_uuid')
 
