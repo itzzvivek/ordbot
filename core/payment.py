@@ -73,7 +73,7 @@ def get_payment_link(order) -> str | None:
             'notes':{
                 'order_uuid': str(order.order_id),
             },
-            'callback_url': f"{settings.BASE_URL}/payment/callback/",
+            'callback_url': f"{getattr(settings, 'BASE_URL', 'http://localhost:8000')}/payment/callback/",
             'callback_method': 'get'   
         }
 
@@ -97,10 +97,8 @@ def get_payment_qr_url(razorpay_order_id: str) -> str | None:
             'type': 'upi_qr',
             'name': 'Bot Restaurant',
             'usage': 'single_use',
-            'fixed_amount': True,
-            'payment_amount': None, #linked via order
+            'fixed_amount': False,
             'description': f"order {razorpay_order_id}",
-            'close_by': None,
         })
         return qr.get('image_url')
     except Exception as e:

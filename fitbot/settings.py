@@ -157,6 +157,8 @@ RAZORPAY_KEY_ID = os.environ.get('RAZORPAY_KEY_ID')
 RAZORPAY_KEY_SECRET = os.environ.get('RAZORPAY_KEY_SECRET')
 RAZORPAY_WEBHOOK_SECRET = os.environ.get('RAZORPAY_WEBHOOK_SECRET')
 
+#BASE_URL
+BASE_URL = os.environ.get('BASE_URL','http://localhost:8000')
 
 # logging________
 LOGGING = {
