@@ -72,8 +72,8 @@ def razorpay_webhook(request):
     # verify signature
     if not verify_webhook_signature(payload_body, signature):
         logger.warning("Razorpay webhook signature verification failed")
-        return HttpResponse({"error": "Invalid signature"}, status=400)
-    
+        return JsonResponse({"error": "Invalid signature"}, status=400)
+
     # parse event
     try:
         event = json.loads(payload_body)
@@ -91,13 +91,24 @@ def razorpay_webhook(request):
         notes = payment.get('notes', {})
         order_uuid = notes.get('order_uuid')
 
-        try:
-            order = Order.objects.get(order_id=order_uuid)
-        except Order.DoesNotExist:
-            logger.error(f"Order not found for Razorpay order_id: {rz_order_id}")
+        # Look up order by Razorpay order_id (more reliable than notes,
+        # which may be empty depending on how the payment was made)
+        order = None
+        if rz_order_id:
+            order = Order.objects.filter(razorpay_order_id=rz_order_id).first()
+        if order is None and order_uuid:
+            order = Order.objects.filter(order_id=order_uuid).first()
+
+        if order is None:
+            logger.error(
+                f"Order not found for Razorpay order_id={rz_order_id}, "
+                f"order_uuid={order_uuid}"
+            )
             return JsonResponse({"error": "Order not found"}, status=404)
-        
-        if order.status != 'paid':
+
+        # If already marked paid, don't process again (idempotency)
+        if order.status == 'paid':
+            logger.info(f"Order {order.order_id} already processed - skipping")
             return JsonResponse({'status': 'already processed'})
 
         # mark paid
@@ -110,30 +121,26 @@ def razorpay_webhook(request):
         session.state = 'completed'
         session.save()
 
-
         # send whatsapp success message
-        _send_success_whatapp(order)
+        _send_success_whatsapp(order)
 
-        logger.info(f"Order {order.order_id} marked as paid and Payment ID {payment_id}")
+        logger.info(f"Order {order.order_id} marked as paid. Payment ID {payment_id}")
         return JsonResponse({"status": "success"})
 
-        # Handle payment. failed
-
+    # Handle payment.failed
     elif event_type == "payment.failed":
         payment = event['payload']['payment']['entity']
         rz_order_id = payment.get('order_id')
-        
-        try:
-            order = Order.objects.get(razorpay_order_id=rz_order_id)
+
+        order = Order.objects.filter(razorpay_order_id=rz_order_id).first()
+        if order:
             _send_payment_failed_whatsapp(order)
-        except Order.DoesNotExist:
-            pass
 
         return JsonResponse({"status": "noted"})
+
     return JsonResponse({"status": "ignored"})
 
 #  Razorpay Redirect Callback (browser redirect after payment)
-
 @require_GET
 def payment_callback(request):
     """
