@@ -178,7 +178,7 @@ def _send_whatsapp(to_phone: str, message: str, media_url: str = None):
         client = Client(settings.TWILIO_ACCOUNT_SID, settings.TWILIO_AUTH_TOKEN)
 
         kwargs = {
-            'from_': f"whatsapp:{settings.TWILIO_WHATSAPP_NUMBER}",
+            'from_': f"whatsapp:{settings.TWILIO_WHATSAPP_NUMBER_FROM}",
             'to':    to_phone,
             'body':  message,
         }

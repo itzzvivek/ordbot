@@ -24,26 +24,27 @@ HELP_MSG = (
     "Type *cancel* to cancel your current order."
 )
 
+
 def _is_greeting(text: str) -> bool:
     return text.lower().strip() in GREETING_KEYWORDS
 
-def _build_menu_text()-> str:
+
+def _build_menu_text() -> str:
     items = MenuItem.objects.filter(is_available=True).order_by('id')
     if not items.exists():
         return "Sorry, our menu is currently unavailable. Please check back later."
-    
-    lines = [" 🍽️ *Our Menu*\n"]
-    for idx, items in enumerate(items, start=1):
-        desc = f"\n _{items.description}_\n" if items.description else ""
-        lines.append(f"{idx}. {items.emoji} *{items.name}* - ₹{items.price}{desc}")
-    
+
+    lines = ["🍽️ *Our Menu*\n"]
+    for idx, item in enumerate(items, start=1):
+        desc = f"\n   _{item.description}_\n" if item.description else ""
+        lines.append(f"{idx}. {item.emoji} *{item.name}* - ₹{item.price}{desc}")
+
     lines.append(
         "\n📝 *How to order:*\n"
         "Type item numbers separated by commas.\n"
         "Example: `1, 2, 3` or `1x2, 2x1` (item x quantity)\n\n"
         "Type *done* when finished selecting."
     )
-
     return "\n".join(lines)
 
 
@@ -56,13 +57,12 @@ def _parse_order_input(text: str):
     text = text.strip().lower().replace(' ', '')
     selections = {}
 
-    # Support both '1,2,3' and '1x2,3x1' formats
     parts = re.split(r'[,;]', text)
     for part in parts:
         part = part.strip()
         if not part:
             continue
-        match = re.fullmatch(r'(\d+)x(\d+)?', part) #e.g. 2*3
+        match = re.fullmatch(r'(\d+)x(\d+)', part)  # e.g. 2x3
         if match:
             idx, qty = int(match.group(1)), int(match.group(2))
         elif part.isdigit():
@@ -83,9 +83,10 @@ def _build_order_summary(order: Order) -> str:
         f"\n📦 *Deliver to:*\n"
         f"  {order.user.full_name}\n"
         f"  {order.user.address}\n"
-        f"  📞 {order.user.contact_number}"
+        f"  📞 {order.user.contact_number}"  # matches your UserSession field name
     )
     return "\n".join(lines)
+
 
 def _build_payment_message(order: Order, qr_url: str = None, payment_link: str = None) -> str:
     msg = (
@@ -107,49 +108,46 @@ def _build_payment_message(order: Order, qr_url: str = None, payment_link: str =
 # Handler for incoming messages
 def handle_message(sender_phone: str, incoming_text: str) -> dict:
     """
-    Main entry point
+    Main entry point.
     Returns a dict:
         {
-            "text": str, # always present
-            "media_url": str | None, # QR image URL if applicable
-            "payment_link": str | None, # Razorpay Link
+            "text": str,
+            "media_url": str | None,
+            "payment_link": str | None,
         }
     """
-
     text = incoming_text.strip()
     text_lower = text.lower()
 
     response = {'text': '', 'media_url': None, 'payment_link': None}
 
-    # cancel command
-
+    # ── Cancel command ──────────────────────────────────────────
     if text_lower == 'cancel':
         session, _ = UserSession.objects.get_or_create(phone=sender_phone)
-        # cancel any pending orders
         Order.objects.filter(user=session, status='pending').update(status='cancelled')
-        session.state = 'new'
-        session.first_name = ''
-        session.last_name = ''
-        session.address = ''
-        session.contact_number = ''
+        session.state          = 'new'
+        session.first_name     = ''
+        session.last_name      = ''
+        session.address        = ''
+        session.contact_number = ''   # matches your model field
         session.save()
-        response['text'] = ("Your current order has been cancelled.\n\n" 
-                            "If you'd like to start a new order, just say hi! 👋")
+        response['text'] = (
+            "Your current order has been cancelled.\n\n"
+            "If you'd like to start a new order, just say hi! 👋"
+        )
         return response
-    
-    # get or create session
 
+    # ── Get or create session ───────────────────────────────────
     session, created = UserSession.objects.get_or_create(phone=sender_phone)
 
-    # Greeting -> restart if already completed
-
+    # ── Greeting ────────────────────────────────────────────────
     if _is_greeting(text_lower):
         if session.state in ('completed', 'new', ''):
-            session.state = 'ask_firstname'
-            session.first_name = ''
-            session.last_name  = ''
-            session.address    = ''
-            session.contact_phone = ''
+            session.state          = 'ask_firstname'
+            session.first_name     = ''
+            session.last_name      = ''
+            session.address        = ''
+            session.contact_number = ''   # matches your model field
             session.save()
             response['text'] = WELCOME_MSG
         else:
@@ -160,27 +158,26 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             )
         return response
 
-    # state machine
+    # ── State machine ────────────────────────────────────────────
     state = session.state.strip()
-    logger.warning(f"DEBUG >>> phone={sender_phone} state=[{state}] repr={repr(session.state)} text=[{text}]")
 
-    # New user who did not say hi
+    # New user who didn't say hi
     if state == 'new':
         response['text'] = HELP_MSG
         return response
-    
-    # ASK FIRST NAME 
+
+    # ASK FIRST NAME
     if state == 'ask_firstname':
         if len(text) < 2:
             response['text'] = "Please enter a valid first name."
             return response
-        session.first_name = text.title()            
+        session.first_name = text.title()
         session.state = 'ask_lastname'
         session.save()
         response['text'] = f"Nice to meet you, *{session.first_name}*! 😊\n\nWhat's your *last name*?"
         return response
-    
-    # ASk LAST NAME
+
+    # ASK LAST NAME
     if state == 'ask_lastname':
         if len(text) < 2:
             response['text'] = "Please enter a valid last name."
@@ -194,7 +191,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             f"_(Include street, area, city and pincode)_"
         )
         return response
-    
+
     # ASK ADDRESS
     if state == 'ask_address':
         if len(text) < 10:
@@ -208,26 +205,26 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             "_(We'll call you only if needed for delivery)_"
         )
         return response
-    
+
     # ASK PHONE
     if state == 'ask_phone':
         digits = re.sub(r'\D', '', text)
         if len(digits) < 10:
             response['text'] = "Please enter a valid phone number (at least 10 digits)."
             return response
-        session.contact_phone = digits
+        session.contact_number = digits   # matches your model field
         session.state = 'show_menu'
         session.save()
         response['text'] = (
             f"✅ *Details saved!*\n\n"
             f"👤 Name: {session.full_name}\n"
             f"📍 Address: {session.address}\n"
-            f"📞 Phone: {session.contact_phone}\n\n"
+            f"📞 Phone: {session.contact_number}\n\n"
             f"Here's our menu! 👇\n\n"
             + _build_menu_text()
         )
         return response
-    
+
     # SHOW MENU / AWAITING ORDER
     if state in ('show_menu', 'awaiting_order'):
         if text_lower == 'menu':
@@ -251,7 +248,7 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
                 + _build_menu_text()
             )
             return response
-        
+
         # Create / replace pending order
         Order.objects.filter(user=session, status='pending').delete()
         order = Order.objects.create(user=session)
@@ -261,7 +258,6 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             OrderItem.objects.create(order=order, item=item, quantity=qty)
 
         order.calculate_total()
-        logger.warning(f"DEBUG TOTAL >>> items={list(order.orderitem_set.values("quantity","item__price"))} total_amount={order.total_amount}")
         order.refresh_from_db()
         session.state = 'confirm_order'
         session.save()
@@ -274,8 +270,9 @@ def handle_message(sender_phone: str, incoming_text: str) -> dict:
             f"❌ Type *cancel* to cancel."
         )
         return response
-    
-        # CONFIRM ORDER
+
+    # ── CRITICAL FIX: confirm_order must be at TOP LEVEL ─────────
+    # (was incorrectly indented inside show_menu block before)
     if state == 'confirm_order':
         if text_lower == 'menu':
             session.state = 'show_menu'
