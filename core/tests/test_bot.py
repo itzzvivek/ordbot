@@ -356,9 +356,9 @@ class ConfirmOrderTest(TestCase):
         self.order = make_order_with_items(self.session)
 
     def test_confirm_triggers_payment(self):
-        with patch('core.bot.create_razorpay_order') as mock_rz, \
-            patch('core.bot.get_payment_qr_url', return_value=None), \
-            patch('core.bot.get_payment_link', return_value="https://rzp.io/test"):
+        with patch('core.payment.create_razorpay_order') as mock_rz, \
+            patch('core.payment.get_payment_qr_url', return_value=None), \
+            patch('core.payment.get_payment_link', return_value="https://rzp.io/test"):
             mock_rz.return_value = {'id': 'order_test_123'}
             result = handle_message(PHONE_1, "confirm")
 
@@ -367,9 +367,9 @@ class ConfirmOrderTest(TestCase):
         self.assertEqual(self.session.state, "awaiting_payment")
 
     def test_confirm_saves_razorpay_order_id(self):
-        with patch('core.bot.create_razorpay_order') as mock_rz, \
-            patch('core.bot.get_payment_qr_url', return_value=None), \
-            patch('core.bot.get_payment_link', return_value="https://rzp.io/test"):
+        with patch('core.payment.create_razorpay_order') as mock_rz, \
+            patch('core.payment.get_payment_qr_url', return_value=None), \
+            patch('core.payment.get_payment_link', return_value="https://rzp.io/test"):
             mock_rz.return_value = {'id': 'order_RAZORPAY_123'}
             handle_message(PHONE_1, "confirm")
 
@@ -389,25 +389,25 @@ class ConfirmOrderTest(TestCase):
         self.assertEqual(self.session.state, "confirm_order")
 
     def test_razorpay_failure_shows_error(self):
-        with patch('core.bot.create_razorpay_order', return_value=None):
+        with patch('core.payment.create_razorpay_order', return_value=None):
             result = handle_message(PHONE_1, "confirm")
         self.assertIn("error", result['text'].lower())
         self.session.refresh_from_db()
         self.assertEqual(self.session.state, "confirm_order")
 
     def test_payment_link_included_in_response(self):
-        with patch('core.bot.create_razorpay_order') as mock_rz, \
-            patch('core.bot.get_payment_qr_url', return_value=None), \
-            patch('core.bot.get_payment_link', return_value="https://rzp.io/link123"):
+        with patch('core.payment.create_razorpay_order') as mock_rz, \
+            patch('core.payment.get_payment_qr_url', return_value=None), \
+            patch('core.payment.get_payment_link', return_value="https://rzp.io/link123"):
             mock_rz.return_value = {'id': 'order_abc'}
             result = handle_message(PHONE_1, "confirm")
 
         self.assertEqual(result['payment_link'], "https://rzp.io/link123")
 
     def test_qr_url_in_media_url(self):
-        with patch('core.bot.create_razorpay_order') as mock_rz, \
-            patch('core.bot.get_payment_qr_url', return_value="https://qr.example.com/img.png"), \
-            patch('core.bot.get_payment_link', return_value=None):
+        with patch('core.payment.create_razorpay_order') as mock_rz, \
+            patch('core.payment.get_payment_qr_url', return_value="https://qr.example.com/img.png"), \
+            patch('core.payment.get_payment_link', return_value=None):
             mock_rz.return_value = {'id': 'order_abc'}
             result = handle_message(PHONE_1, "confirm")
 

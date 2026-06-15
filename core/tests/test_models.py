@@ -24,7 +24,7 @@ class UserSessionModelTest(TestCase):
         self.assertEqual(session.first_name, "")
         self.assertEqual(session.last_name, "")
         self.assertEqual(session.address, "")
-        self.assertEqual(session.contact_phone, "")
+        self.assertEqual(session.contact_number, "")
 
     def test_full_name_property(self):
         session = UserSession.objects.create(
